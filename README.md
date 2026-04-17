@@ -32,43 +32,47 @@ No user authentication, no multi-tenant isolation, no permission boundaries betw
 
 ---
 
-## Architecture
+## Architecture: Enabling HIP Properties
 
-### Boot Sequence
+### How QIBIOS Enables Quantum-Like Computing
+
+QIBIOS is designed to create the foundational conditions for quantum-like computation by implementing HIP's architectural principles at the firmware level:
+
+**No Global Locks in Boot:** The boot sequence does not use any global synchronization points. Each initialization step proceeds independently without waiting on shared state.
+
+**Event-Driven Initialization:** Hardware components initialize in response to completion events from previous steps, not fixed time delays. This eliminates timing-based dependencies.
+
+**Isolated Initialization Paths:** Different hardware subsystems initialize in isolated contexts that cannot interfere with each other, preserving the independence needed for parallel pathway maintenance.
+
+**Non-Deterministic Boot Order:** Where ordering is not semantically required, initialization order is non-deterministic, preventing predictable boot timing patterns.
+
+---
+
+## Boot Sequence
+
+### Event-Driven Initialization
 
 ```
 Power On
     ↓
-Hardware Initialization (Minimal)
+[Event: Power Stable]
     ↓
-Memory Controller Setup
+Memory Controller Init → [Event: Memory Ready]
     ↓
-Processor Feature Enablement
+Processor Feature Enable → [Event: CPU Ready]
     ↓
-Load QIOS Kernel
+Storage Detection → [Event: Storage Ready]
     ↓
-Transfer Control
+Load QIOS Kernel → [Event: Kernel Loaded]
+    ↓
+Transfer Control to Kernel
 ```
+
+**Key Difference from Traditional BIOS:** No fixed delays, no polling loops, no global coordination. Each step triggers the next through event completion, not timer expiration.
 
 **Total Boot Time Target:** < 100ms on supported hardware
 
-### Hardware Initialization
-
-**Included:**
-- Memory controller initialization
-- Processor feature detection and enablement
-- Basic display initialization (VGA/serial)
-- Storage device detection
-- Input device detection
-
-**Excluded:**
-- TPM initialization
-- Secure boot verification
-- Network initialization (unless configured)
-- Multi-core coordination (deferred to kernel)
-- Power management setup (deferred to kernel)
-
-### Memory Model
+### Memory Model: Isolated Regions
 
 **Simplified Memory Layout:**
 ```
@@ -77,7 +81,10 @@ Transfer Control
 0x10000000+           : Quantum-Like Processing Region
 ```
 
-No memory encryption, no per-process page table isolation during boot. Memory protection provided by kernel after handoff.
+Memory is configured with isolation boundaries from the start:
+- Each region has hardware-enforced access controls
+- No shared memory regions between components
+- Memory protection configured before kernel load
 
 ---
 
@@ -90,15 +97,15 @@ QIBIOS establishes communication with QIOS kernel through minimal handshake:
 **Boot Handshake Protocol:**
 1. QIBIOS loads QIOS kernel into memory
 2. QIBIOS writes boot parameters to fixed memory location
-3. QIBIOS jumps to kernel entry point
+3. QIBIOS signals kernel ready event
 4. Kernel reads boot parameters
-5. Handshake complete - kernel proceeds
+5. Handshake complete - kernel proceeds with isolated initialization
 
-No signatures, no cryptographic verification, no attestation. Trust established through secure boot media (verified USB, trusted storage).
+**No Signatures, No Verification:** Trust established through verified boot media (verified USB, trusted storage). The isolation boundary between firmware and kernel is hardware-enforced, not cryptographically enforced.
 
 ### No Inter-Firmware Communication
 
-QIBIOS is monolithic - no separate firmware components communicating. All functionality in single binary.
+QIBIOS is monolithic - no separate firmware components communicating. All functionality in single binary. This eliminates coordination overhead within firmware itself.
 
 ---
 
@@ -113,10 +120,11 @@ QIBIOS is monolithic - no separate firmware components communicating. All functi
 
 **Optimization Targets:**
 - Platforms with hardware support for:
-  - High-precision timers
+  - High-precision timers (for temporal coordination)
   - Predictable execution timing
   - Low-latency memory access
   - Minimal interrupt latency
+  - Hardware memory isolation (MPU/IOMMU)
 
 ### Storage Support
 
@@ -126,9 +134,9 @@ QIBIOS is monolithic - no separate firmware components communicating. All functi
 - SATA/AHCI (legacy support)
 
 **Not Supported:**
-- Network boot (adds complexity)
+- Network boot (adds coordination overhead)
 - RAID configurations
-- Encrypted storage
+- Encrypted storage (cryptographic overhead)
 
 ### Input/Output
 
@@ -154,38 +162,37 @@ Minimal configuration stored in fixed location on boot media:
 struct QIBIOSConfig {
     kernel_path: [u8; 64],      // Path to kernel binary
     kernel_args: [u8; 256],     // Kernel command line
-    boot_delay_ms: u16,         // Delay before boot
+    boot_delay_ms: u16,         // Optional delay (for debugging)
     debug_output: u8,           // Debug output level
+    lane_count: u8,             // Number of parallel lanes to enable
+    isolation_mode: u8,         // 0 = lightweight handshake (default)
 }
 ```
 
-Total configuration size: 322 bytes
-
-### Configuration Sources
-
-1. Fixed configuration embedded in firmware
-2. Configuration file on boot media (optional)
-3. Interactive configuration (development mode only)
+Total configuration size: 324 bytes
 
 ---
 
 ## Quantum-Like Computing Optimizations
 
-### Timer Precision
+### Timer Precision for Temporal Coordination
 
 QIBIOS initializes high-precision timers early in boot:
-- x86_64: TSC calibration
+- x86_64: TSC calibration with invariant TSC detection
 - ARM64: Generic Timer configuration
 - RISC-V: mtime configuration
 
 Timer precision target: < 1 microsecond
 
-### Memory Timing
+These timers enable event-driven coordination without time-based delays, supporting the temporal correlation needed for quantum-like computation.
+
+### Memory Timing Predictability
 
 Memory controller configured for:
-- Predictable access timing
-- Minimal refresh interruption
-- Cache configuration optimized for temporal processing
+- Predictable access timing (disabled speculative prefetch in critical regions)
+- Minimal refresh interruption awareness
+- Cache configuration optimized for isolated execution
+- Memory bandwidth partitioning where hardware supports
 
 ### Processor State Preservation
 
@@ -193,6 +200,9 @@ QIBIOS preserves processor state where possible:
 - Floating-point state
 - Vector register state
 - Performance counter state
+- Debug register state
+
+This preservation reduces initialization overhead for quantum-like workloads that may use extended processor features.
 
 ---
 
@@ -201,7 +211,7 @@ QIBIOS preserves processor state where possible:
 ### Debug Output
 
 **Serial Console (115200 baud):**
-- Boot progress messages
+- Boot progress events (not timing)
 - Hardware detection results
 - Error conditions
 - Kernel handoff confirmation
@@ -215,7 +225,7 @@ QIBIOS preserves processor state where possible:
 
 Minimal error handling - most errors result in:
 - Error message to console
-- System halt
+- System halt with diagnostic code
 
 No recovery mechanisms, no fallback options. Failed boot requires hardware reset and investigation.
 
@@ -270,12 +280,15 @@ Security is the responsibility of:
 | Feature | CIBIOS | QIBIOS |
 |---------|--------|--------|
 | Communication Mode | Cryptographic | Lightweight Handshake |
+| RTRO Support | Yes | No |
 | Secure Boot | Yes | No |
 | Multi-User | Yes | No |
 | Network Support | Full | None |
 | Boot Time | ~500ms | <100ms |
 | Memory Encryption | Optional | No |
 | Attestation | Yes | No |
+| Global Locks | No | No |
+| Event-Driven | Yes | Yes |
 | Quantum-Like Optimized | No | Yes |
 | Offline Optimized | No | Yes |
 | Use Case | General Purpose | Quantum-Like Computing |
@@ -286,8 +299,8 @@ Security is the responsibility of:
 
 ### Phase 1: Core Implementation (Months 1-4)
 
-- Basic x86_64 boot implementation
-- Memory controller initialization
+- Basic x86_64 boot implementation with event-driven init
+- Memory controller initialization with isolation boundaries
 - USB boot support
 - Serial debug output
 
@@ -303,7 +316,7 @@ Security is the responsibility of:
 - High-precision timer integration
 - Memory timing optimization
 - Processor state preservation
-- Temporal processing support
+- Parallel lane initialization support
 
 ### Phase 4: Ecosystem (Months 7-12)
 
