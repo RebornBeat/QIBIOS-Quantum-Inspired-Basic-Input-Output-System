@@ -3,109 +3,81 @@
 
 ## Overview
 
-The Quantum-Inspired Basic Input/Output System (QIBIOS) represents a streamlined boot firmware optimized for quantum-like classical computing workloads. Building on the HIP framework's lightweight handshake mode, QIBIOS provides minimal-overhead boot and initialization for systems prioritizing performance over cryptographic security overhead.
+The Quantum-Inspired Basic Input/Output System (QIBIOS) is a lightweight boot firmware designed for systems optimized for quantum-like classical computation. Implementing the Hybrid Isolation Paradigm's lightweight handshake communication mode, QIBIOS provides minimal-overhead boot and hardware initialization for systems where cryptographic verification overhead is unacceptable for the target workload, where physical security establishes the trust boundary, and where maximum performance from the first instruction is the design goal.
 
-QIBIOS is designed for:
-- Offline and air-gapped computing environments
-- Quantum-like and temporal-analog computing platforms
-- Single-user systems with physical security
-- Research and development environments
-- Performance-critical workloads where cryptographic overhead is unacceptable
+QIBIOS boots and hands off to QIOS. These two systems are designed together. QIBIOS establishes the hardware foundation with minimal overhead; QIOS builds the execution environment on top of it. Both implement HIP's isolation principles in the lightweight handshake mode, appropriate for the air-gapped, single-user, physically secured environments where these systems operate.
+
+QIBIOS is not a simplified or inferior version of CIBIOS. It is an alternative firmware designed for a fundamentally different threat model and use case. Where CIBIOS serves multi-user networked environments requiring cryptographic verification chains, QIBIOS serves single-user offline environments requiring maximum performance and minimum initialization overhead.
 
 ---
 
-## Core Philosophy: Performance Through Minimalism
+## Design Philosophy: Performance Through Minimalism and Correct Threat Modeling
 
-### Design Principles
+### The Core Design Insight
 
-**Principle 1: Essential Functions Only**
-QIBIOS implements only the absolute minimum required for boot and hardware initialization. No cryptographic verification layers, no multi-user support infrastructure, no network security features.
+Security overhead exists to protect against adversaries. When no adversary exists—when the system is air-gapped, physically secured, and operated by a single trusted user—security overhead provides no benefit and pure cost. QIBIOS is designed for this threat model.
 
-**Principle 2: Hardware Trust Boundary**
-Security is provided by physical access control and isolation boundaries, not cryptographic mechanisms. The firmware trusts the hardware and physical environment.
+This is not a security compromise. It is correct threat modeling. A cryptographic verification chain that protects against network-based attacks provides zero protection when the threat vector is physical. Physical security, verified boot media, and isolation architecture provide the actual protection in this environment.
 
-**Principle 3: Quantum-Like Optimization**
-Boot sequences and hardware initialization are optimized for temporal-analog and quantum-like computing workloads, minimizing initialization latency and preserving hardware state for computational use.
+### Essential Functions Only
 
-**Principle 4: Single-User Assumption**
-No user authentication, no multi-tenant isolation, no permission boundaries between applications. Single trusted user with physical access to hardware.
+QIBIOS implements only the absolute minimum required for boot and hardware initialization. No cryptographic verification layers, no multi-user support infrastructure, no network security features, no attestation chains, no measured boot sequences. Each of these would add overhead without providing security benefit in the target environment.
 
----
+### Hardware Trust Boundary
 
-## Architecture: Enabling HIP Properties
+Security in QIBIOS's deployment context is provided by physical access control and isolation boundaries, not cryptographic mechanisms. The firmware trusts the hardware and the physical environment.
 
-### How QIBIOS Enables Quantum-Like Computing
+### Quantum-Like Optimization from the First Instruction
 
-QIBIOS is designed to create the foundational conditions for quantum-like computation by implementing HIP's architectural principles at the firmware level:
+Boot sequences and hardware initialization are optimized for the quantum-like computing workloads that QIOS will run. This means minimizing initialization latency, establishing isolation boundaries before any code executes, and configuring hardware state that QIOS's lane-based execution will immediately use.
 
-**No Global Locks in Boot:** The boot sequence does not use any global synchronization points. Each initialization step proceeds independently without waiting on shared state.
+### HIP Lightweight Handshake Mode
 
-**Event-Driven Initialization:** Hardware components initialize in response to completion events from previous steps, not fixed time delays. This eliminates timing-based dependencies.
-
-**Isolated Initialization Paths:** Different hardware subsystems initialize in isolated contexts that cannot interfere with each other, preserving the independence needed for parallel pathway maintenance.
-
-**Non-Deterministic Boot Order:** Where ordering is not semantically required, initialization order is non-deterministic, preventing predictable boot timing patterns.
+QIBIOS implements HIP's lightweight handshake communication mode. The handoff from QIBIOS to QIOS is a lightweight authenticated handshake, not a cryptographically signed and verified transaction. Trust is established through the physical environment, not through signatures.
 
 ---
 
-## Boot Sequence
+## How QIBIOS Enables Quantum-Like Properties
+
+QIBIOS is not merely a fast bootloader. It establishes the hardware conditions that make QIOS's quantum-like computational properties possible.
+
+### No Global Locks from the Start
+
+Traditional firmware initialization uses sequential locked initialization steps. QIBIOS initializes hardware components through event-driven completion chains with no global synchronization points. This means QIOS inherits a system state where no global lock patterns have been established.
+
+### Isolation Boundaries Before Kernel Execution
+
+QIBIOS establishes hardware memory isolation boundaries before QIOS begins execution. QIOS does not request isolation—it is born into it. Lane memory regions are isolated at the hardware level before any QIOS code runs.
 
 ### Event-Driven Initialization
 
-```
-Power On
-    ↓
-[Event: Power Stable]
-    ↓
-Memory Controller Init → [Event: Memory Ready]
-    ↓
-Processor Feature Enable → [Event: CPU Ready]
-    ↓
-Storage Detection → [Event: Storage Ready]
-    ↓
-Load QIOS Kernel → [Event: Kernel Loaded]
-    ↓
-Transfer Control to Kernel
-```
+The boot sequence does not use fixed time delays. Each initialization step proceeds when its prerequisites are complete, signaled through event mechanisms. This event-driven pattern is established at firmware level and inherited by QIOS.
 
-**Key Difference from Traditional BIOS:** No fixed delays, no polling loops, no global coordination. Each step triggers the next through event completion, not timer expiration.
+### Parallel Hardware Initialization
 
-**Total Boot Time Target:** < 100ms on supported hardware
-
-### Memory Model: Isolated Regions
-
-**Simplified Memory Layout:**
-```
-0x00000000 - 0x000FFFFF : Firmware Reserved (1MB)
-0x00100000 - 0x0FFFFFFF : Application Memory
-0x10000000+           : Quantum-Like Processing Region
-```
-
-Memory is configured with isolation boundaries from the start:
-- Each region has hardware-enforced access controls
-- No shared memory regions between components
-- Memory protection configured before kernel load
+Where hardware components can initialize in parallel without semantic ordering requirements, QIBIOS initializes them concurrently. This reduces boot time and establishes the pattern of parallel independent operation that QIOS extends.
 
 ---
 
-## Communication Model: Lightweight Handshake
+## Architecture
 
-### Firmware-Kernel Handshake
+### Boot Sequence: Event-Driven Initialization
 
-QIBIOS establishes communication with QIOS kernel through minimal handshake:
+Each step proceeds when the previous step signals completion, not after a fixed time delay. Steps that have no semantic dependency on each other proceed in parallel. The total boot sequence time is minimized because no artificial delays are introduced anywhere.
 
-**Boot Handshake Protocol:**
-1. QIBIOS loads QIOS kernel into memory
-2. QIBIOS writes boot parameters to fixed memory location
-3. QIBIOS signals kernel ready event
-4. Kernel reads boot parameters
-5. Handshake complete - kernel proceeds with isolated initialization
+The sequence begins with hardware power stabilization, proceeds through memory controller initialization, processor feature configuration, storage detection, isolation boundary establishment, QIOS kernel loading, and handoff. Each transition is event-triggered.
 
-**No Signatures, No Verification:** Trust established through verified boot media (verified USB, trusted storage). The isolation boundary between firmware and kernel is hardware-enforced, not cryptographically enforced.
+**Total Boot Time Target:** Under one second on modern hardware with fast storage.
 
-### No Inter-Firmware Communication
+### Memory Model: Isolated Regions from Boot
 
-QIBIOS is monolithic - no separate firmware components communicating. All functionality in single binary. This eliminates coordination overhead within firmware itself.
+QIBIOS configures a simplified memory layout optimized for QIOS's lane architecture. Memory regions are isolated at the hardware level before QIOS begins execution. No shared memory regions exist between regions. Memory protection is configured before kernel load.
+
+The memory layout reserves a firmware region below the main application space, establishes the kernel region for QIOS, and provides the application memory space where QIOS will create lane regions for application execution.
+
+### Communication Model: Lightweight Handshake to QIOS
+
+QIBIOS hands off to QIOS through a minimal handshake. Boot parameters including detected hardware configuration, established memory layout, and initialization status are written to a known memory location. QIOS reads these parameters. No signatures are required. The isolation boundary between firmware and kernel is hardware-enforced, not cryptographically verified.
 
 ---
 
@@ -114,120 +86,20 @@ QIBIOS is monolithic - no separate firmware components communicating. All functi
 ### Supported Architectures
 
 **Primary Targets:**
-- x86_64 (Intel/AMD)
-- ARM64 (ARMv8+)
+- x86_64 (Intel and AMD)
+- ARM64 (ARMv8 and later)
 - RISC-V (RV64GC)
 
-**Optimization Targets:**
-- Platforms with hardware support for:
-  - High-precision timers (for temporal coordination)
-  - Predictable execution timing
-  - Low-latency memory access
-  - Minimal interrupt latency
-  - Hardware memory isolation (MPU/IOMMU)
+**Optimization Characteristics:**
+QIBIOS is optimized for hardware providing predictable execution timing, low-latency memory access, minimal interrupt latency, and hardware memory isolation mechanisms. These characteristics support QIOS's quantum-like computation goals.
 
 ### Storage Support
 
-**Supported:**
-- USB Mass Storage (boot source)
-- NVMe (fast application loading)
-- SATA/AHCI (legacy support)
+USB mass storage is the primary boot medium. Fast local storage devices are supported for application loading. Network boot is not included because it introduces network coordination overhead inconsistent with the design philosophy and the air-gapped deployment context.
 
-**Not Supported:**
-- Network boot (adds coordination overhead)
-- RAID configurations
-- Encrypted storage (cryptographic overhead)
+### Input and Output
 
-### Input/Output
-
-**Supported:**
-- USB HID (keyboard, mouse)
-- Serial console
-- VGA text mode
-
-**Not Supported:**
-- Advanced graphics initialization
-- Audio initialization
-- Network interface initialization (deferred to kernel)
-
----
-
-## Boot Configuration
-
-### Configuration Format
-
-Minimal configuration stored in fixed location on boot media:
-
-```rust
-struct QIBIOSConfig {
-    kernel_path: [u8; 64],      // Path to kernel binary
-    kernel_args: [u8; 256],     // Kernel command line
-    boot_delay_ms: u16,         // Optional delay (for debugging)
-    debug_output: u8,           // Debug output level
-    lane_count: u8,             // Number of parallel lanes to enable
-    isolation_mode: u8,         // 0 = lightweight handshake (default)
-}
-```
-
-Total configuration size: 324 bytes
-
----
-
-## Quantum-Like Computing Optimizations
-
-### Timer Precision for Temporal Coordination
-
-QIBIOS initializes high-precision timers early in boot:
-- x86_64: TSC calibration with invariant TSC detection
-- ARM64: Generic Timer configuration
-- RISC-V: mtime configuration
-
-Timer precision target: < 1 microsecond
-
-These timers enable event-driven coordination without time-based delays, supporting the temporal correlation needed for quantum-like computation.
-
-### Memory Timing Predictability
-
-Memory controller configured for:
-- Predictable access timing (disabled speculative prefetch in critical regions)
-- Minimal refresh interruption awareness
-- Cache configuration optimized for isolated execution
-- Memory bandwidth partitioning where hardware supports
-
-### Processor State Preservation
-
-QIBIOS preserves processor state where possible:
-- Floating-point state
-- Vector register state
-- Performance counter state
-- Debug register state
-
-This preservation reduces initialization overhead for quantum-like workloads that may use extended processor features.
-
----
-
-## Development and Debugging
-
-### Debug Output
-
-**Serial Console (115200 baud):**
-- Boot progress events (not timing)
-- Hardware detection results
-- Error conditions
-- Kernel handoff confirmation
-
-**VGA Text Mode:**
-- Boot status display
-- Error messages
-- Interactive configuration (development mode)
-
-### Error Handling
-
-Minimal error handling - most errors result in:
-- Error message to console
-- System halt with diagnostic code
-
-No recovery mechanisms, no fallback options. Failed boot requires hardware reset and investigation.
+Basic serial console and VGA text mode output are provided for development and debugging. No advanced graphics initialization is performed during boot.
 
 ---
 
@@ -235,115 +107,101 @@ No recovery mechanisms, no fallback options. Failed boot requires hardware reset
 
 ### Trust Boundaries
 
-**Trusted:**
-- Boot media (USB, verified source)
-- Hardware platform
-- Physical environment
+**Trusted:** Boot media from verified physical source, hardware platform, physical environment, single user with physical access.
 
-**Untrusted:**
-- Network (if present)
-- External storage (after boot)
-- User applications (after boot)
+**Not Addressed:** Network attacks (system is air-gapped), multi-user isolation (single user), adversarial software (trusted user, verified media).
 
-### No Cryptographic Security
+### No Cryptographic Security Features
 
-QIBIOS provides no cryptographic security features:
-- No signature verification
-- No encrypted storage
-- No secure boot
-- No measured boot
+QIBIOS provides no cryptographic security features. No signature verification, no encrypted storage, no secure boot in the traditional sense, no attestation chain. Security is achieved through physical access control, verified boot media sources, and isolation architecture.
 
-Security is the responsibility of:
-- Physical access control
-- Verified boot media
-- Trusted supply chain
+### Correct Application of This Design
 
-### When to Use QIBIOS
+**QIBIOS is appropriate for:**
+- Air-gapped research and computation systems
+- Quantum-like computing development platforms
+- Single-user offline computation environments
+- Performance benchmarking systems
+- Experimental computing platforms
 
-**Appropriate Use Cases:**
-- Air-gapped research systems
-- Quantum-like computing platforms
-- Development environments
-- Single-user offline systems
-- Performance benchmarking platforms
-
-**Not Appropriate:**
+**QIBIOS is not appropriate for:**
 - Networked systems
 - Multi-user systems
-- Systems processing sensitive data
+- Systems processing sensitive data in adversarial environments
 - Systems without physical security
+
+---
+
+## Minimum Hardware Requirements
+
+QIBIOS is designed to be lightweight. It runs on modest hardware.
+
+**Minimum Requirements:**
+- Any 64-bit processor (x86_64, ARM64, or RISC-V RV64GC)
+- 64MB RAM
+- Any bootable storage medium (USB, SSD, hard drive)
+- Serial or VGA output for development and debugging
+
+**Recommended for QIOS Workloads:**
+- Modern 64-bit processor with hardware memory protection
+- 256MB or more RAM for meaningful parallel lane workloads
+- Fast storage for application loading
+- Serial console for low-overhead output
 
 ---
 
 ## Comparison: QIBIOS vs CIBIOS
 
 | Feature | CIBIOS | QIBIOS |
-|---------|--------|--------|
+|---|---|---|
 | Communication Mode | Cryptographic | Lightweight Handshake |
-| RTRO Support | Yes | No |
-| Secure Boot | Yes | No |
-| Multi-User | Yes | No |
-| Network Support | Full | None |
-| Boot Time | ~500ms | <100ms |
-| Memory Encryption | Optional | No |
-| Attestation | Yes | No |
-| Global Locks | No | No |
-| Event-Driven | Yes | Yes |
-| Quantum-Like Optimized | No | Yes |
-| Offline Optimized | No | Yes |
-| Use Case | General Purpose | Quantum-Like Computing |
+| OS Verification | Cryptographic signature required | Lightweight handshake |
+| Boot Target | Multi-user, networked | Single-user, air-gapped |
+| Boot Time | Optimized with verification | Minimal, under one second target |
+| Security Model | Cryptographic verification chain | Physical security boundary |
+| Global Locks | None | None |
+| Isolation Establishment | Before kernel | Before kernel |
+| Event-Driven Init | Yes | Yes |
+| HIP Mode | Cryptographic | Lightweight Handshake |
+| Hardware Vendor Features | Optional, with warnings | Not needed |
+
+---
+
+## Implementation Language and Evolution Path
+
+### Current Implementation in Rust
+
+QIBIOS is implemented in Rust targeting binary processor architectures. Rust provides memory safety, zero-cost abstractions for performance-critical boot code, minimal runtime appropriate for firmware-level software, and strong support across x86_64, ARM64, and RISC-V.
+
+### Transition to Non-Binary Computation
+
+The isolation and event-driven initialization principles of QIBIOS do not require binary computation. When non-binary hardware becomes practical—whether through analog, event-analog, or other non-binary substrate designs—QIBIOS's architecture maps to that substrate:
+
+- Event-driven initialization maps to natural substrate event mechanisms
+- Isolation boundary establishment maps to substrate-specific protection mechanisms
+- The lightweight handshake to QIOS remains valid regardless of substrate
+
+Non-binary substrates may require programming languages designed for their execution model. Research into appropriate languages for non-binary firmware represents a future development area. QIBIOS's architectural principles provide the design foundation that any such language would implement.
 
 ---
 
 ## Implementation Roadmap
 
-### Phase 1: Core Implementation (Months 1-4)
+### Phase 1: Core Boot Implementation (Months 1 to 4)
 
-- Basic x86_64 boot implementation with event-driven init
-- Memory controller initialization with isolation boundaries
-- USB boot support
-- Serial debug output
+Basic x86_64 boot implementation with event-driven initialization. Memory isolation boundary establishment before kernel. USB boot support. Serial debug output. QIOS handoff validation.
 
-### Phase 2: Architecture Expansion (Months 3-6)
+### Phase 2: Architecture Expansion (Months 3 to 6)
 
-- ARM64 support
-- RISC-V support
-- NVMe boot support
-- Performance optimization
+ARM64 support with appropriate power management initialization. RISC-V support. Fast storage boot support. Performance optimization across all architectures.
 
-### Phase 3: Quantum-Like Features (Months 5-8)
+### Phase 3: Quantum-Like Optimization (Months 5 to 8)
 
-- High-precision timer integration
-- Memory timing optimization
-- Processor state preservation
-- Parallel lane initialization support
+High-precision timer initialization for application use. Memory configuration optimized for lane-based workloads. Parallel hardware initialization where semantically correct. Processor state preservation for maximum computational availability at handoff.
 
-### Phase 4: Ecosystem (Months 7-12)
+### Phase 4: Ecosystem Integration (Months 7 to 12)
 
-- QIOS kernel integration
-- Development tools
-- Documentation
-- Community support
-
----
-
-## Technical Specifications
-
-### Binary Size Target
-- x86_64: < 64KB
-- ARM64: < 64KB
-- RISC-V: < 64KB
-
-### Boot Time Target
-- Cold boot to kernel handoff: < 100ms
-
-### Memory Requirements
-- Runtime: < 1MB
-
-### Supported Platforms
-- Standard PC hardware (x86_64)
-- ARM development boards
-- RISC-V development boards
+QIOS kernel integration validation. Development and debugging tools. Documentation. Community support channels.
 
 ---
 
@@ -351,21 +209,8 @@ Security is the responsibility of:
 
 **License:** Open source (MIT or Apache 2.0)
 
-**Source Availability:** Full source code available
+**Source Availability:** Complete source code published
 
-**Binary Distribution:** Pre-built binaries for supported platforms
+**Documentation:** Full technical documentation included
 
-**Documentation:** Complete technical documentation included
-
----
-
-## Community and Support
-
-**Development Status:** Active development
-
-**Contributing:** Community contributions welcome
-
-**Support Channels:**
-- GitHub issues
-- Development mailing list
-- Community forums
+**Community:** Active development with community contributions welcome
